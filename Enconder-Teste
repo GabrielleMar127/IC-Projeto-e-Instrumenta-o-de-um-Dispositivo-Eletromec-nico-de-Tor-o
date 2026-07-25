@@ -1,0 +1,50 @@
+// Variável volátil para armazenar a contagem de pulsos.
+volatile long count = 0;
+float angulo = 0; // Alterado para float para o ângulo ter casas decimais
+
+// Define os pinos do ESP8266 para os canais A e B do encoder.
+#define pinA 5 // Fio Preto
+#define pinB 4 // Fio Branco
+
+// Função de Interrupção (ISR)
+// No ESP8266, é obrigatório colocar IRAM_ATTR antes de declarar a função
+void IRAM_ATTR pulse() {
+  // Lê o estado do pino B para determinar a direção.
+  if (digitalRead(pinB) == LOW) {
+    count++; // Sentido horário
+  } else {
+    count--; // Sentido anti-horário
+  }
+}
+
+void setup() {
+  // O ESP8266 se comunica melhor em 115200 baud rate (ajuste no seu Monitor Serial também)
+  Serial.begin(115200);
+
+  // Como criamos um divisor de tensão físico na placa, mudamos para INPUT normal
+  pinMode(pinA, INPUT);
+  pinMode(pinB, INPUT);
+
+  // A função 'pulse' será chamada na borda de SUBIDA (RISING) do sinal no pino A.
+  attachInterrupt(digitalPinToInterrupt(pinA), pulse, RISING);
+
+  Serial.println("ESP8266 pronto para contar os pulsos do encoder!");
+}
+
+void loop() {
+  // Leitura segura da variável volátil
+  noInterrupts();
+  long tempCount = count;
+  interrupts();
+
+  Serial.print("Contagem: ");
+  Serial.print(tempCount);
+
+  // Calcula o ângulo (usando float para maior precisão matemática)
+  angulo = (float)tempCount * 360.0 / 8192.0;
+  
+  Serial.print(" | Ângulo: ");
+  Serial.println(angulo);
+
+  delay(200);
+}
