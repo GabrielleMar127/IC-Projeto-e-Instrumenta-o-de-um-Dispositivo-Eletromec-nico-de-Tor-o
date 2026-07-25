@@ -1,0 +1,56 @@
+// Variável volátil para armazenar a contagem de pulsos.
+// "volatile" é essencial pois a variável é modificada dentro de uma ISR.
+volatile long count = 0;
+long angulo = 0;
+
+// Define os pinos do Arduino para os canais A e B do encoder.
+#define pinA 20
+#define pinB 21
+
+// Função de Interrupção (ISR - Interrupt Service Routine)
+// Esta função é chamada automaticamente toda vez que o pino A for de LOW para HIGH.
+void pulse() {
+  // Lê o estado do pino B para determinar a direção.
+  // A leitura é feita no exato momento em que a borda de subida do pino A é detectada.
+  if (digitalRead(pinB) == LOW) {
+    // Se o pino B está em LOW, o encoder está girando em um sentido (ex: horário).
+    count++;
+  } else {
+    // Se o pino B está em HIGH, o encoder está girando no sentido oposto (ex: anti-horário).
+    count--;
+  }
+}
+
+void setup() {
+  // Inicia a comunicação serial.
+  Serial.begin(9600);
+
+  // Configura os pinos A e B como entradas.
+  // Usar INPUT_PULLUP é uma boa prática para encoders, pois garante um estado HIGH definido quando o contato está aberto, evitando leituras "flutuantes".
+  pinMode(pinA, INPUT_PULLUP);
+  pinMode(pinB, INPUT_PULLUP);
+
+  // A função 'pulse' será chamada apenas na borda de SUBIDA (RISING) do sinal no pino A.
+  attachInterrupt(digitalPinToInterrupt(pinA), pulse, RISING);
+
+  Serial.println("Arduino pronto para contar os pulsos do encoder.");
+}
+
+void loop() {
+  // Para ler a variável 'count' de forma segura, é bom desabilitar as interrupções temporariamente, copiar o valor e depois reativá-las. Isso evita que a interrupção ocorra no meio da leitura de uma variável de múltiplos bytes.
+  noInterrupts();
+  long tempCount = count;
+  interrupts();
+
+  // Imprime a contagem atual no monitor serial.
+  Serial.print("Contagem: ");
+  Serial.print(tempCount);
+
+  // Imprime o ângulo no monitor serial.
+  angulo = tempCount * 360/8192;
+  Serial.print(" | Ângulo: ");
+  Serial.println(angulo);
+
+  // Aguarda um pouco antes da próxima leitura para não sobrecarregar o monitor serial.
+  delay(200);
+}
