@@ -1,50 +1,77 @@
-// Variável volátil para armazenar a contagem de pulsos.
+// Variáveis voláteis para armazenar a contagem (modificadas pelas interrupções)
 volatile long count = 0;
+volatile long voltas = 0; // Opcional: para registrar voltas completas, se quiser
 float angulo = 0; // Alterado para float para o ângulo ter casas decimais
 
-// Define os pinos do ESP8266 para os canais A e B do encoder.
-#define pinA 5 // Fio Preto
-#define pinB 4 // Fio Branco
+// Define os pinos do ESP8266 para os canais A, B e Z do encoder.
+#define pinA 5  // Pino D1 - Fio do Canal A
+#define pinB 4  // Pino D2 - Fio do Canal B
+#define pinZ 14 // Pino D5 - Fio do Canal Z (Index)
 
-// Função de Interrupção (ISR)
-// No ESP8266, é obrigatório colocar IRAM_ATTR antes de declarar a função
-void IRAM_ATTR pulse() {
-  // Lê o estado do pino B para determinar a direção.
-  if (digitalRead(pinB) == LOW) {
-    count++; // Sentido horário
-  } else {
-    count--; // Sentido anti-horário
-  }
+// ---------------------------------------------------------
+// Função de Interrupção do Canal A (Lê a Posição e Direção)
+// ---------------------------------------------------------
+void IRAM_ATTR pulseA() {
+  // Lê o estado do pino B para determinar a direção.
+  if (digitalRead(pinB) == LOW) {
+    count++; // Sentido horário
+  } else {
+    count--; // Sentido anti-horário
+  }
+}
+
+// ---------------------------------------------------------
+// Função de Interrupção do Canal Z (Marca o Zero Absoluto)
+// ---------------------------------------------------------
+void IRAM_ATTR pulseZ() {
+  // O pulso Z serve como referência de posição inicial.
+  // Sempre que ele é acionado, forçamos o contador a voltar para 0,
+  // corrigindo qualquer drift (desvio) de leitura mecânica.
+  count = 0; 
+  voltas++; // (Opcional) Conta que uma volta inteira foi dada
 }
 
 void setup() {
-  // O ESP8266 se comunica melhor em 115200 baud rate (ajuste no seu Monitor Serial também)
-  Serial.begin(115200);
+  // O ESP8266 se comunica melhor em 115200 baud rate (ajuste no seu Monitor Serial também)
+  Serial.begin(115200);
 
-  // Como criamos um divisor de tensão físico na placa, mudamos para INPUT normal
-  pinMode(pinA, INPUT);
-  pinMode(pinB, INPUT);
+  // Entradas com divisor de tensão físico já montado
+  pinMode(pinA, INPUT);
+  pinMode(pinB, INPUT);
+  pinMode(pinZ, INPUT);
 
-  // A função 'pulse' será chamada na borda de SUBIDA (RISING) do sinal no pino A.
-  attachInterrupt(digitalPinToInterrupt(pinA), pulse, RISING);
+  // Associa as interrupções aos pinos correspondentes
+  // A função 'pulseA' será chamada na borda de SUBIDA (RISING) do sinal no pino A.
+  attachInterrupt(digitalPinToInterrupt(pinA), pulseA, RISING);
+  
+  // A função 'pulseZ' será chamada na borda de SUBIDA (RISING) do sinal no pino Z.
+  attachInterrupt(digitalPinToInterrupt(pinZ), pulseZ, RISING);
 
-  Serial.println("ESP8266 pronto para contar os pulsos do encoder!");
+  Serial.println("ESP8266 pronto para contar os pulsos do encoder com referência Z!");
 }
 
 void loop() {
-  // Leitura segura da variável volátil
-  noInterrupts();
-  long tempCount = count;
-  interrupts();
+  // Leitura segura das variáveis voláteis
+  // Desligamos as interrupções rapidamente apenas para copiar o valor 
+  // sem risco de a variável mudar bem no meio da cópia.
+  noInterrupts();
+  long tempCount = count;
+  long tempVoltas = voltas;
+  interrupts();
 
-  Serial.print("Contagem: ");
-  Serial.print(tempCount);
+  Serial.print("Voltas: ");
+  Serial.print(tempVoltas);
+  
+  Serial.print(" | Contagem: ");
+  Serial.print(tempCount);
 
-  // Calcula o ângulo (usando float para maior precisão matemática)
-  angulo = (float)tempCount * 360.0 / 8192.0;
-  
-  Serial.print(" | Ângulo: ");
-  Serial.println(angulo);
+  // Calcula o ângulo (usando float para maior precisão matemática)
+  // Como o seu encoder tem 8192 pulsos por volta:
+  angulo = (float)tempCount * 360.0 / 8192.0;
+  
+  Serial.print(" | Ângulo absoluto: ");
+  Serial.println(angulo);
 
-  delay(200);
+  // Atraso curto para não travar o monitor serial com muito texto
+  delay(200);
 }
